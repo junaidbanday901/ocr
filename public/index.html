@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Form & Excel Batch Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- SheetJS for instant in-browser Excel generation & backup -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header Bar -->
+    <header class="app-header">
+      <div class="logo-area" id="homeLogoBtn" title="Click to Switch Mode / Return to Home" style="cursor: pointer;">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" x2="12" y1="19" y2="22"></line>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <h1>VoiceForm <span class="badge-pro" id="headerModeBadge">LINE LIST</span></h1>
+          <p id="headerSubtitle">Continuous Voice Entry &bull; In-Memory Staging &bull; Excel Generator</p>
+        </div>
+      </div>
+
+      <!-- Center Voice Control Bar -->
+      <div class="header-voice-controls">
+        <button id="toggleMicBtn" class="btn-mic active" title="Click to Toggle Microphone">
+          <span class="mic-pulse"></span>
+          <svg class="mic-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" x2="12" y1="19" y2="22"></line>
+          </svg>
+          <span id="micBtnText">Listening...</span>
+        </button>
+
+        <div class="audio-waves" id="audioWaves">
+          <span class="bar bar-1"></span>
+          <span class="bar bar-2"></span>
+          <span class="bar bar-3"></span>
+          <span class="bar bar-4"></span>
+          <span class="bar bar-5"></span>
+        </div>
+
+        <button id="helpCommandsBtn" class="btn-ghost" title="Voice Commands Cheat Sheet">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          Commands
+        </button>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div class="header-actions">
+        <button id="homeNavBtn" class="btn-ghost btn-home-nav" title="Switch Mode (Line List or Nikshay IDs)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          Home
+        </button>
+        <button id="openFolderBtn" class="btn-ghost" title="Open Workspace Folder in File Explorer">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          Folder
+        </button>
+      </div>
+    </header>
+
+    <!-- Prominent Active Field Banner -->
+    <div class="active-field-banner" id="activeFieldBanner">
+      <div class="banner-left">
+        <div class="banner-pulse-dot"></div>
+        <div class="banner-info">
+          <span class="banner-label">ACTIVE VOICE TARGET:</span>
+          <span class="banner-field-name" id="bannerFieldName">First Name</span>
+          <span class="banner-step" id="bannerStep">(Field 1 of 6)</span>
+        </div>
+      </div>
+      <div class="banner-transcript">
+        <span class="transcript-prefix">Heard:</span>
+        <span class="transcript-text" id="liveTranscriptText">"Listening for voice input..."</span>
+      </div>
+      <div class="banner-hint">
+        Say <strong>"Next"</strong> or click any field to switch &bull; Say <strong>"Add Row"</strong> when ready
+      </div>
+    </div>
+
+    <!-- Main Workspace Grid (Line List Mode) -->
+    <main class="main-grid" id="lineListView">
+      <!-- Left Panel: Form Input & Voice Navigation -->
+      <section class="card form-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <h2>Current Record Entry</h2>
+            <p>Voice populates the highlighted active field</p>
+          </div>
+          <div class="card-badges">
+            <span class="badge-status" id="speechStatusBadge">Microphone Active</span>
+          </div>
+        </div>
+
+        <form id="recordForm" class="record-form" autocomplete="off" onsubmit="event.preventDefault();">
+          <!-- Step 1: First Name -->
+          <div class="form-group active-group" data-field="firstName" id="group-firstName">
+            <div class="field-label-row">
+              <label for="firstName">
+                <span class="step-num">1</span> First Name
+              </label>
+              <span class="active-mic-badge">
+                <span class="dot"></span> Active Field
+              </span>
+            </div>
+            <div class="input-wrapper">
+              <input type="text" id="firstName" name="firstName" placeholder="e.g. John" autofocus>
+              <button type="button" class="field-focus-btn" title="Focus voice to First Name" onclick="setActiveField('firstName')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 2: Last Name -->
+          <div class="form-group" data-field="lastName" id="group-lastName">
+            <div class="field-label-row">
+              <label for="lastName">
+                <span class="step-num">2</span> Last Name
+              </label>
+              <span class="active-mic-badge">
+                <span class="dot"></span> Active Field
+              </span>
+            </div>
+            <div class="input-wrapper">
+              <input type="text" id="lastName" name="lastName" placeholder="e.g. Doe">
+              <button type="button" class="field-focus-btn" title="Focus voice to Last Name" onclick="setActiveField('lastName')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- 2-Column Row for Age & Sex -->
+          <div class="form-row-duo">
+            <!-- Step 3: Age -->
+            <div class="form-group" data-field="age" id="group-age">
+              <div class="field-label-row">
+                <label for="age">
+                  <span class="step-num">3</span> Age
+                </label>
+                <span class="active-mic-badge">
+                  <span class="dot"></span> Active
+                </span>
+              </div>
+              <div class="input-wrapper">
+                <input type="number" id="age" name="age" placeholder="e.g. 29" min="1" max="130">
+                <button type="button" class="field-focus-btn" title="Focus voice to Age" onclick="setActiveField('age')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 4: Sex -->
+            <div class="form-group" data-field="sex" id="group-sex">
+              <div class="field-label-row">
+                <label for="sex">
+                  <span class="step-num">4</span> Sex
+                </label>
+                <span class="active-mic-badge">
+                  <span class="dot"></span> Active
+                </span>
+              </div>
+              <div class="input-wrapper select-wrapper">
+                <select id="sex" name="sex">
+                  <option value="">Select or speak...</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+                <button type="button" class="field-focus-btn" title="Focus voice to Sex" onclick="setActiveField('sex')">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
+                </button>
+              </div>
+              <!-- Quick pills -->
+              <div class="quick-pills">
+                <button type="button" class="pill" onclick="setSex('Male')">Male</button>
+                <button type="button" class="pill" onclick="setSex('Female')">Female</button>
+                <button type="button" class="pill" onclick="setSex('Other')">Other</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 5: Phone Number -->
+          <div class="form-group" data-field="phoneNo" id="group-phoneNo">
+            <div class="field-label-row">
+              <label for="phoneNo">
+                <span class="step-num">5</span> Phone No
+              </label>
+              <span class="active-mic-badge">
+                <span class="dot"></span> Active Field
+              </span>
+            </div>
+            <div class="input-wrapper">
+              <input type="text" id="phoneNo" name="phoneNo" placeholder="e.g. 9876543210">
+              <button type="button" class="field-focus-btn" title="Focus voice to Phone No" onclick="setActiveField('phoneNo')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 6: Address -->
+          <div class="form-group" data-field="address" id="group-address">
+            <div class="field-label-row">
+              <label for="address">
+                <span class="step-num">6</span> Address
+              </label>
+              <span class="active-mic-badge">
+                <span class="dot"></span> Active Field
+              </span>
+            </div>
+            <div class="input-wrapper">
+              <textarea id="address" name="address" rows="2" placeholder="e.g. 742 Evergreen Terrace, Springfield"></textarea>
+              <button type="button" class="field-focus-btn" title="Focus voice to Address" onclick="setActiveField('address')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Form Navigation & Add Row Actions -->
+          <div class="form-nav-controls">
+            <div class="nav-buttons-left">
+              <button type="button" id="prevFieldBtn" class="btn-secondary" title="Go to previous field (or say 'Back')">
+                &larr; Previous Field
+              </button>
+              <button type="button" id="nextFieldBtn" class="btn-secondary" title="Go to next field (or say 'Next')">
+                Next Field &rarr;
+              </button>
+            </div>
+            <button type="button" id="clearFormBtn" class="btn-outline-danger" title="Clear current inputs (or say 'Clear')">
+              Clear
+            </button>
+          </div>
+
+          <!-- PRIMARY ACTION: Add Row to In-Memory Queue -->
+          <div class="form-submit-row">
+            <button type="button" id="addRowBtn" class="btn-primary-add" title="Save this person to in-memory queue & start next">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span>Add Row to Memory &amp; Next Person</span>
+              <span class="shortcut-tip">Say "Add Row"</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Right Panel: In-Memory Staged Records & Excel Generation -->
+      <section class="card table-card">
+        <div class="card-header table-header">
+          <div class="card-title-group">
+            <div class="title-with-counter">
+              <h2>In-Memory Staged Records</h2>
+              <span class="counter-badge" id="recordCounter">0 Records Queued</span>
+            </div>
+            <p>Rows accumulate here in memory until final submission to Excel</p>
+          </div>
+
+          <div class="table-header-actions">
+            <button id="clearAllBtn" class="btn-ghost-danger" title="Clear all staged rows in memory" style="display: none;">
+              Clear All
+            </button>
+          </div>
+        </div>
+
+        <!-- Master Final Submission Action Bar -->
+        <div class="final-submission-bar">
+          <div class="final-submission-info">
+            <div class="final-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            </div>
+            <div>
+              <h3>Final Submission</h3>
+              <p>Generates <code>records.xlsx</code> on disk &amp; initiates browser download</p>
+            </div>
+          </div>
+          <button id="finalSubmitBtn" class="btn-final-excel" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span>Generate &amp; Save Excel</span>
+            <span class="shortcut-tip">Say "Generate Excel"</span>
+          </button>
+        </div>
+
+        <!-- Live Interactive Table Container -->
+        <div class="table-scroll-container">
+          <table class="records-table" id="recordsTable">
+            <thead>
+              <tr>
+                <th style="width: 45px;">#</th>
+                <th>First Name</th>
+                <th>Last Name</th>
+                <th style="width: 60px;">Age</th>
+                <th style="width: 75px;">Sex</th>
+                <th>Phone No</th>
+                <th>Address</th>
+                <th style="width: 80px; text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="recordsTbody">
+              <tr class="empty-row" id="emptyStateRow">
+                <td colspan="8">
+                  <div class="empty-state">
+                    <div class="empty-icon">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                    </div>
+                    <h4>No records in memory yet</h4>
+                    <p>Speak name &amp; details on the left, then click <strong>"Add Row"</strong> (or say <em>"Add Row"</em>) to stage records here.</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Nikshay IDs Fast Voice Entry Grid -->
+    <main class="nikshay-grid view-section" id="nikshayView" style="display: none;">
+      <!-- Left Panel: Single-Field Nikshay Voice Entry -->
+      <section class="card form-card nikshay-form-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <h2>Nikshay ID Voice Logger</h2>
+            <p>Single-field rapid logger &bull; Continuous voice entry</p>
+          </div>
+          <div class="card-badges">
+            <span class="badge-status badge-teal" id="nikshaySpeechStatusBadge">Microphone Active</span>
+          </div>
+        </div>
+
+        <!-- Prominent Nikshay Target Banner -->
+        <div class="nikshay-banner">
+          <div class="banner-pulse-dot teal-dot"></div>
+          <div class="nikshay-banner-content">
+            <span class="nikshay-banner-title">VOICE ACTIVE: NIKSHAY ID</span>
+            <span class="nikshay-banner-sub">Speak digits continuously (e.g. <em>"8 4 9 2 0 1 5"</em> or <em>"8492015"</em>)</span>
+          </div>
+        </div>
+
+        <!-- Single Form Field -->
+        <form id="nikshayForm" class="record-form" autocomplete="off" onsubmit="event.preventDefault();">
+          <div class="form-group active-group nikshay-group" id="group-nikshayId">
+            <div class="field-label-row">
+              <label for="nikshayIdInput">
+                <span class="step-num step-teal">🆔</span> Nikshay ID Number
+              </label>
+              <span class="active-mic-badge badge-teal-light">
+                <span class="dot teal-dot"></span> Active Target
+              </span>
+            </div>
+            <div class="input-wrapper nikshay-input-wrapper">
+              <input type="text" id="nikshayIdInput" name="nikshayId" placeholder="e.g. 8492015" class="nikshay-input" autofocus>
+              <button type="button" class="btn-add-nikshay" id="addNikshayBtn" title="Add ID to queued list">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>Add ID</span>
+              </button>
+            </div>
+            <p class="nikshay-hint">
+              💡 Say numbers aloud &bull; each recognized ID adds to the list &bull; or click <strong>Add ID</strong> / press <strong>Enter</strong>.
+            </p>
+          </div>
+
+          <!-- Quick Actions Row -->
+          <div class="nikshay-controls-row">
+            <button type="button" id="deleteLastNikshayBtn" class="btn-secondary" title="Remove the most recently added Nikshay ID">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h10a5 5 0 0 1 5 5v2"></path><polyline points="3 14 7 10 3 6"></polyline></svg>
+              Delete Last (Undo)
+            </button>
+            <button type="button" id="clearNikshayInputBtn" class="btn-outline-danger" title="Clear current input box">
+              Clear Input
+            </button>
+          </div>
+
+          <!-- Spoken Commands Helper Box -->
+          <div class="voice-cheatsheet-box">
+            <div class="cheatsheet-title">🎙️ Fast Voice Commands for Nikshay IDs:</div>
+            <div class="cheatsheet-grid">
+              <div class="cheatsheet-item">
+                <code>"8 4 9 2 0 1 5"</code>
+                <span>Appends ID directly</span>
+              </div>
+              <div class="cheatsheet-item">
+                <code>"Delete Last"</code>
+                <span>Removes latest added ID</span>
+              </div>
+              <div class="cheatsheet-item">
+                <code>"Clear"</code>
+                <span>Clears current input</span>
+              </div>
+              <div class="cheatsheet-item">
+                <code>"Generate Excel"</code>
+                <span>Exports <code>nikshay_records.xlsx</code></span>
+              </div>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <!-- Right Panel: Staged Nikshay IDs Table & Final Submission -->
+      <section class="card table-card nikshay-table-card">
+        <div class="card-header table-header">
+          <div class="card-title-group">
+            <div class="title-with-counter">
+              <h2>Queued Nikshay IDs</h2>
+              <span class="counter-badge counter-teal" id="nikshayCounter">0 IDs Queued</span>
+            </div>
+            <p>IDs accumulate here in memory until final submission to Excel</p>
+          </div>
+
+          <div class="table-header-actions">
+            <button id="clearAllNikshayBtn" class="btn-ghost-danger" title="Clear all staged Nikshay IDs" style="display: none;">
+              Clear All
+            </button>
+          </div>
+        </div>
+
+        <!-- Master Final Submission Action Bar for Nikshay -->
+        <div class="final-submission-bar nikshay-final-bar">
+          <div class="final-submission-info">
+            <div class="final-icon teal-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            </div>
+            <div>
+              <h3>Final Nikshay Excel Submission</h3>
+              <p>Generates <code>nikshay_records.xlsx</code> on disk &amp; initiates browser download</p>
+            </div>
+          </div>
+          <button id="finalSubmitNikshayBtn" class="btn-final-excel btn-final-teal" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span>Generate &amp; Save Excel</span>
+            <span class="shortcut-tip">Say "Generate Excel"</span>
+          </button>
+        </div>
+
+        <!-- Live Interactive Table Container -->
+        <div class="table-scroll-container">
+          <table class="records-table nikshay-table" id="nikshayTable">
+            <thead>
+              <tr>
+                <th style="width: 55px;">#</th>
+                <th style="width: 220px;">Entry Time</th>
+                <th>Nikshay ID</th>
+                <th style="width: 90px; text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="nikshayTbody">
+              <tr class="empty-row" id="emptyNikshayRow">
+                <td colspan="4">
+                  <div class="empty-state">
+                    <div class="empty-icon teal-icon">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                    </div>
+                    <h4>No Nikshay IDs in memory yet</h4>
+                    <p>Speak ID numbers aloud or type them in the box on the left, then click <strong>"Add ID"</strong> (or let voice auto-add).</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Mode Selection Modal (Homepage Prompt) -->
+    <div class="modal-overlay" id="modeSelectModal">
+      <div class="modal-content mode-modal-content">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <div class="modal-icon-badge">🎯</div>
+            <div>
+              <h3>Choose Generation Mode</h3>
+              <p class="modal-subtitle">Select what you would like to generate</p>
+            </div>
+          </div>
+          <button class="modal-close-btn" id="closeModeModalBtn" title="Close dialog">&times;</button>
+        </div>
+        <div class="mode-options-grid">
+          <!-- Option 1: Line List -->
+          <div class="mode-card" id="selectLineListCard" tabindex="0">
+            <div class="mode-card-header">
+              <div class="mode-card-icon blue-icon">📋</div>
+              <span class="mode-chip">Full Records</span>
+            </div>
+            <h4>Line List Generator</h4>
+            <p>Comprehensive patient and demographic entry: First Name, Last Name, Age, Sex, Phone No, and Address with step-by-step voice guidance.</p>
+            <div class="mode-card-footer">
+              <span class="mode-arrow-btn">Open Line List &rarr;</span>
+            </div>
+          </div>
+
+          <!-- Option 2: Nikshay IDs -->
+          <div class="mode-card highlight-card" id="selectNikshayCard" tabindex="0">
+            <div class="mode-card-header">
+              <div class="mode-card-icon teal-icon">🆔</div>
+              <span class="mode-chip chip-teal">Fast Voice Logger</span>
+            </div>
+            <h4>Nikshay IDs List</h4>
+            <p>Rapid voice logging focused exclusively on Nikshay IDs. Just speak numbers sequentially to stack IDs continuously and generate Excel.</p>
+            <div class="mode-card-footer">
+              <span class="mode-arrow-btn teal-btn">Open Nikshay IDs &rarr;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Voice Command Cheat Sheet Modal -->
+    <div class="modal-overlay" id="commandsModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>🎙️ Voice Commands Cheat Sheet</h3>
+          <button class="modal-close-btn" id="closeModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <table class="commands-table">
+            <thead>
+              <tr>
+                <th>What You Say</th>
+                <th>Action Performed</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>"Next"</code> or <code>"Next Field"</code></td>
+                <td>Advances to the next form field</td>
+              </tr>
+              <tr>
+                <td><code>"Back"</code> or <code>"Previous"</code></td>
+                <td>Returns to previous form field</td>
+              </tr>
+              <tr>
+                <td><code>"Add Row"</code> or <code>"Next Person"</code></td>
+                <td>Saves current row to memory, resets form, and focuses First Name</td>
+              </tr>
+              <tr>
+                <td><code>"Clear"</code> or <code>"Reset"</code></td>
+                <td>Clears all inputs in current form</td>
+              </tr>
+              <tr>
+                <td><code>"Generate Excel"</code> or <code>"Final Submit"</code></td>
+                <td>Compiles all staged rows and saves <code>records.xlsx</code></td>
+              </tr>
+              <tr>
+                <td><code>"First Name [name]"</code></td>
+                <td>Jumps directly to First Name and fills it</td>
+              </tr>
+              <tr>
+                <td><code>"Last Name [name]"</code></td>
+                <td>Jumps directly to Last Name and fills it</td>
+              </tr>
+              <tr>
+                <td><code>"Age [number]"</code></td>
+                <td>Jumps to Age and parses number (e.g. "twenty five" &rarr; 25)</td>
+              </tr>
+              <tr>
+                <td><code>"Sex [Male / Female / Other]"</code></td>
+                <td>Jumps to Sex and normalizes selection</td>
+              </tr>
+              <tr>
+                <td><code>"Phone [digits]"</code></td>
+                <td>Jumps to Phone No and extracts phone digits</td>
+              </tr>
+              <tr>
+                <td><code>"Address [text]"</code></td>
+                <td>Jumps to Address and fills location text</td>
+              </tr>
+              <tr style="background: rgba(20, 184, 166, 0.1);">
+                <th colspan="2" style="color: #2DD4BF; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding-top: 14px; padding-bottom: 6px;">
+                  Nikshay IDs Mode Commands
+                </th>
+              </tr>
+              <tr>
+                <td><code>"[Any Numbers]"</code> e.g. <code>"8 4 9 2 0 1 5"</code></td>
+                <td>Parses digits and adds Nikshay ID to the list immediately</td>
+              </tr>
+              <tr>
+                <td><code>"Delete Last"</code> or <code>"Remove"</code></td>
+                <td>Removes the last added Nikshay ID from the list</td>
+              </tr>
+              <tr>
+                <td><code>"Clear"</code> or <code>"Clear All"</code></td>
+                <td>Clears current input or staged list</td>
+              </tr>
+              <tr>
+                <td><code>"Generate Excel"</code></td>
+                <td>Exports queued IDs to <code>nikshay_records.xlsx</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
